@@ -1,23 +1,18 @@
-FROM golang:1.23-alpine AS build
-
-RUN apk add --no-cache ca-certificates
+FROM golang:1.27-alpine AS build
 
 WORKDIR /src
-COPY app/go.mod app/go.sum* ./
-RUN go mod download
-
 COPY app/ .
 RUN CGO_ENABLED=0 go build -o /server ./cmd/server
 
-FROM alpine:3.20
+FROM alpine:3.23
 
-RUN apk add --no-cache ca-certificates \
-    && addgroup -S app \
-    && adduser -S -G app app
+RUN apk upgrade --no-cache \
+    && apk add --no-cache ca-certificates \
+    && addgroup -S -g 101 app \
+    && adduser -S -D -H -u 100 -G app app
 
-WORKDIR /home/app
-COPY --from=build /server /home/app/server
+COPY --from=build --chown=100:101 /server /server
 
-USER app
+USER 100:101
 EXPOSE 8080
-ENTRYPOINT ["/home/app/server"]
+ENTRYPOINT ["/server"]
