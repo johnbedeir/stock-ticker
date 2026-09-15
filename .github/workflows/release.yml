@@ -50,15 +50,12 @@ jobs:
 
       - name: Download release metadata
         if: ${{ steps.published.outputs.promote == 'true' }}
-        env:
-          GH_TOKEN: ${{ github.token }}
-          RUN_ID: ${{ github.event.workflow_run.id }}
-          REPOSITORY: ${{ github.repository }}
-        run: |
-          gh run download "${RUN_ID}" \
-            --repo "${REPOSITORY}" \
-            --name release-metadata \
-            --dir "${RUNNER_TEMP}/release-metadata"
+        uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5
+        with:
+          name: release-metadata
+          path: ${{ runner.temp }}/release-metadata
+          github-token: ${{ github.token }}
+          run-id: ${{ github.event.workflow_run.id }}
 
       - name: Verify release metadata
         if: ${{ steps.published.outputs.promote == 'true' }}
