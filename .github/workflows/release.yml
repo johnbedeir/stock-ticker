@@ -1,0 +1,263 @@
+name: Release
+
+on:
+  workflow_run:
+    workflows:
+      - CI
+    types:
+      - completed
+
+permissions:
+  actions: read
+  contents: read
+
+concurrency:
+  group: production-image-promotion
+  cancel-in-progress: false
+
+env:
+  IMAGE_NAME: us-east1-docker.pkg.dev/johnydev/stock-ticker/stock-ticker
+  VALUES_FILE: helm/stock-ticker-chart/values.yaml
+  RELEASE_BRANCH: release/promote-production
+
+jobs:
+  promote:
+    name: Promote tested image
+    if: >-
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'push' &&
+      github.event.workflow_run.head_branch == 'main'
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Check whether CI published an image
+        id: published
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_ID: ${{ github.event.workflow_run.id }}
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          publish_job_id="$(
+            gh api \
+            "repos/${REPOSITORY}/actions/runs/${RUN_ID}/jobs?per_page=100" \
+            --jq '.jobs[] | select(.name == "Publish tested image" and .conclusion == "success") | .id'
+          )"
+          if [ -n "${publish_job_id}" ]; then
+            echo "promote=true" >> "${GITHUB_OUTPUT}"
+          else
+            echo "No successful publish job; this was not a promotable image run."
+            echo "promote=false" >> "${GITHUB_OUTPUT}"
+          fi
+
+      - name: Download release metadata
+        if: ${{ steps.published.outputs.promote == 'true' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_ID: ${{ github.event.workflow_run.id }}
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          gh run download "${RUN_ID}" \
+            --repo "${REPOSITORY}" \
+            --name release-metadata \
+            --dir "${RUNNER_TEMP}/release-metadata"
+
+      - name: Verify release metadata
+        if: ${{ steps.published.outputs.promote == 'true' }}
+        id: metadata
+        env:
+          EXPECTED_SOURCE_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          metadata="${RUNNER_TEMP}/release-metadata/image-metadata.json"
+          source_sha="$(jq -er '.source_sha' "${metadata}")"
+          image_ref="$(jq -er '.image_digest' "${metadata}")"
+
+          if [ "${source_sha}" != "${EXPECTED_SOURCE_SHA}" ]; then
+            echo "Artifact source SHA does not match the triggering CI run." >&2
+            exit 1
+          fi
+          if [[ ! "${source_sha}" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "Invalid source SHA." >&2
+            exit 1
+          fi
+          digest="${image_ref#${IMAGE_NAME}@}"
+          if [ "${image_ref}" = "${digest}" ] ||
+             [[ ! "${digest}" =~ ^sha256:[0-9a-f]{64}$ ]]; then
+            echo "Unexpected image repository or digest." >&2
+            exit 1
+          fi
+
+          printf 'source_sha=%s\n' "${source_sha}" >> "${GITHUB_OUTPUT}"
+          printf 'image_digest=%s\n' "${digest}" >> "${GITHUB_OUTPUT}"
+
+      - name: Create GitHub App token
+        if: ${{ steps.published.outputs.promote == 'true' }}
+        id: app-token
+        uses: actions/create-github-app-token@fee1f7d63c2ff003460e3d139729b119787bc349 # v2
+        with:
+          app-id: ${{ secrets.RELEASE_APP_ID }}
+          private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+          repositories: ${{ github.event.repository.name }}
+          permission-contents: write
+          permission-pull-requests: write
+
+      - name: Check out current main
+        if: ${{ steps.published.outputs.promote == 'true' }}
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: main
+          fetch-depth: 0
+          token: ${{ steps.app-token.outputs.token }}
+
+      - name: Reject stale promotion
+        if: ${{ steps.published.outputs.promote == 'true' }}
+        env:
+          SOURCE_SHA: ${{ steps.metadata.outputs.source_sha }}
+        run: |
+          git fetch origin \
+            "refs/heads/${RELEASE_BRANCH}:refs/remotes/origin/${RELEASE_BRANCH}" \
+            2>/dev/null || true
+
+          if ! git merge-base --is-ancestor "${SOURCE_SHA}" origin/main; then
+            echo "Source SHA is no longer on main; refusing promotion." >&2
+            exit 1
+          fi
+
+          current_tag="$(
+            awk '/^image:/{found=1; next} found && /^  tag:/{gsub(/"/, "", $2); print $2; exit}' \
+              "${VALUES_FILE}"
+          )"
+          pending_tag=""
+          if git show-ref --verify --quiet "refs/remotes/origin/${RELEASE_BRANCH}"; then
+            pending_tag="$(
+              git show "origin/${RELEASE_BRANCH}:${VALUES_FILE}" |
+                awk '/^image:/{found=1; next} found && /^  tag:/{gsub(/"/, "", $2); print $2; exit}'
+            )"
+          fi
+
+          for existing_tag in "${current_tag}" "${pending_tag}"; do
+            [ -z "${existing_tag}" ] && continue
+            if [[ ! "${existing_tag}" =~ ^[0-9a-f]{40}$ ]] ||
+               ! git cat-file -e "${existing_tag}^{commit}" 2>/dev/null; then
+              echo "Existing promoted source is not a valid commit: ${existing_tag}" >&2
+              exit 1
+            fi
+            if [ "${existing_tag}" = "${SOURCE_SHA}" ]; then
+              echo "Source ${SOURCE_SHA} is already promoted or pending."
+              echo "stale=true" >> "${GITHUB_OUTPUT}"
+              exit 0
+            fi
+            if git merge-base --is-ancestor "${SOURCE_SHA}" "${existing_tag}"; then
+              echo "A newer source ${existing_tag} is already promoted or pending."
+              echo "stale=true" >> "${GITHUB_OUTPUT}"
+              exit 0
+            fi
+            if ! git merge-base --is-ancestor "${existing_tag}" "${SOURCE_SHA}"; then
+              echo "Promotion histories diverged; refusing an unsafe update." >&2
+              exit 1
+            fi
+          done
+
+          echo "stale=false" >> "${GITHUB_OUTPUT}"
+        id: stale
+
+      - name: Update production values
+        if: >-
+          steps.published.outputs.promote == 'true' &&
+          steps.stale.outputs.stale != 'true'
+        env:
+          SOURCE_SHA: ${{ steps.metadata.outputs.source_sha }}
+          IMAGE_DIGEST: ${{ steps.metadata.outputs.image_digest }}
+        run: |
+          python3 - <<'PY'
+          import os
+          from pathlib import Path
+
+          path = Path(os.environ["VALUES_FILE"])
+          lines = path.read_text().splitlines(keepends=True)
+          replacements = {"tag": os.environ["SOURCE_SHA"], "digest": os.environ["IMAGE_DIGEST"]}
+          replaced = set()
+          in_image = False
+
+          for index, line in enumerate(lines):
+              if line == "image:\n" or line == "image:":
+                  in_image = True
+                  continue
+              if in_image and line and not line.startswith(" "):
+                  in_image = False
+              if in_image:
+                  for key, value in replacements.items():
+                      if line.startswith(f"  {key}:"):
+                          newline = "\n" if line.endswith("\n") else ""
+                          lines[index] = f"  {key}: {value}{newline}"
+                          replaced.add(key)
+
+          if replaced != set(replacements):
+              raise SystemExit(f"Could not update image fields: {sorted(replaced)}")
+          path.write_text("".join(lines))
+          PY
+
+      - name: Create or update release pull request
+        if: >-
+          steps.published.outputs.promote == 'true' &&
+          steps.stale.outputs.stale != 'true'
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          SOURCE_SHA: ${{ steps.metadata.outputs.source_sha }}
+          IMAGE_DIGEST: ${{ steps.metadata.outputs.image_digest }}
+        run: |
+          if git diff --quiet -- "${VALUES_FILE}"; then
+            echo "The tested image is already selected."
+            exit 0
+          fi
+
+          git config user.name "stock-ticker-release[bot]"
+          git config user.email "stock-ticker-release[bot]@users.noreply.github.com"
+          git switch -C "${RELEASE_BRANCH}"
+          git add -- "${VALUES_FILE}"
+          git diff --cached --name-only |
+            awk -v expected="${VALUES_FILE}" '$0 != expected { exit 1 }'
+          test "$(git diff --cached --name-only | wc -l | tr -d ' ')" = "1"
+          git commit -m "chore(release): promote ${SOURCE_SHA}"
+
+          remote_sha="$(
+            git rev-parse "refs/remotes/origin/${RELEASE_BRANCH}" 2>/dev/null || true
+          )"
+          if [ -n "${remote_sha}" ]; then
+            git push \
+              --force-with-lease="refs/heads/${RELEASE_BRANCH}:${remote_sha}" \
+              origin "HEAD:refs/heads/${RELEASE_BRANCH}"
+          else
+            git push origin "HEAD:refs/heads/${RELEASE_BRANCH}"
+          fi
+
+          title="chore(release): promote ${SOURCE_SHA}"
+          body="$(cat <<EOF
+          Promotes the image built, scanned, and published by successful main CI.
+
+          - Source: \`${SOURCE_SHA}\`
+          - Digest: \`${IMAGE_DIGEST}\`
+
+          Merge is the deliberate production promotion step. Argo CD deploys the digest after merge.
+          EOF
+          )"
+          pr_number="$(
+            gh pr list \
+              --repo "${GITHUB_REPOSITORY}" \
+              --state open \
+              --head "${RELEASE_BRANCH}" \
+              --json number \
+              --jq '.[0].number // empty'
+          )"
+          if [ -n "${pr_number}" ]; then
+            gh pr edit "${pr_number}" \
+              --repo "${GITHUB_REPOSITORY}" \
+              --title "${title}" \
+              --body "${body}"
+          else
+            gh pr create \
+              --repo "${GITHUB_REPOSITORY}" \
+              --base main \
+              --head "${RELEASE_BRANCH}" \
+              --title "${title}" \
+              --body "${body}"
+          fi
