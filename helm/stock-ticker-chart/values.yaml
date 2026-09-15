@@ -66,6 +66,7 @@ podDisruptionBudget:
 serviceMonitor:
   enabled: false
   interval: 30s
+  clusterLabel: gke-prod
   labels: {}
 
 topologySpread:

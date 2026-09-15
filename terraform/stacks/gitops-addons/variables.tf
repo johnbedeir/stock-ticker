@@ -21,3 +21,26 @@ variable "prod_cluster_endpoint" {
 variable "prod_cluster_ca_certificate" {
   type = string
 }
+
+variable "cluster_name" {
+  type = string
+}
+
+variable "prod_prometheus_url" {
+  type = string
+}
+
+variable "prod_prometheus_username" {
+  type      = string
+  sensitive = true
+}
+
+variable "prod_prometheus_password" {
+  type      = string
+  sensitive = true
+}
+
+variable "prod_prometheus_ca_certificate" {
+  type      = string
+  sensitive = true
+}

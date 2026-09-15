@@ -18,4 +18,10 @@ spec:
     - port: http
       path: /metrics
       interval: {{ .Values.serviceMonitor.interval }}
+      {{- with .Values.serviceMonitor.clusterLabel }}
+      metricRelabelings:
+        - action: replace
+          targetLabel: cluster
+          replacement: {{ . | quote }}
+      {{- end }}
 {{- end }}
