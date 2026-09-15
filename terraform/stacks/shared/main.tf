@@ -41,6 +41,12 @@ variable "artifact_repository_id" {
   default     = "stock-ticker"
 }
 
+variable "chart_artifact_repository_id" {
+  description = "ID of the OCI Helm chart Artifact Registry repository."
+  type        = string
+  default     = "stock-ticker-charts"
+}
+
 variable "gke_prod_subnet_cidr" {
   description = "Primary IPv4 CIDR for the gke-prod subnet."
   type        = string
@@ -163,14 +169,27 @@ module "artifact_registry" {
   depends_on = [google_project_service.required]
 }
 
+module "chart_artifact_registry" {
+  source = "../../modules/artifact-registry"
+
+  project_id    = var.project_id
+  region        = var.region
+  repository_id = var.chart_artifact_repository_id
+  description   = "OCI Helm charts for stock-ticker"
+
+  depends_on = [google_project_service.required]
+}
+
 module "iam" {
   source = "../../modules/iam"
 
-  project_id                   = var.project_id
-  project_number               = data.google_project.this.number
-  github_repository            = var.github_repository
-  artifact_repository_name     = module.artifact_registry.repository_name
-  artifact_repository_location = module.artifact_registry.location
+  project_id                         = var.project_id
+  project_number                     = data.google_project.this.number
+  github_repository                  = var.github_repository
+  artifact_repository_name           = module.artifact_registry.repository_name
+  artifact_repository_location       = module.artifact_registry.location
+  chart_artifact_repository_name     = module.chart_artifact_registry.repository_name
+  chart_artifact_repository_location = module.chart_artifact_registry.location
 
   depends_on = [google_project_service.required]
 }
@@ -253,6 +272,26 @@ output "artifact_repository_location" {
 output "artifact_repository_url" {
   description = "Docker repository hostname and path."
   value       = module.artifact_registry.repository_url
+}
+
+output "chart_artifact_repository_id" {
+  description = "ID of the OCI Helm chart Artifact Registry repository."
+  value       = module.chart_artifact_registry.repository_id
+}
+
+output "chart_artifact_repository_name" {
+  description = "Full resource name of the OCI Helm chart Artifact Registry repository."
+  value       = module.chart_artifact_registry.repository_name
+}
+
+output "chart_artifact_repository_location" {
+  description = "Location of the OCI Helm chart Artifact Registry repository."
+  value       = module.chart_artifact_registry.location
+}
+
+output "chart_artifact_repository_url" {
+  description = "OCI Helm chart repository hostname and path."
+  value       = module.chart_artifact_registry.repository_url
 }
 
 output "ci_service_account_email" {

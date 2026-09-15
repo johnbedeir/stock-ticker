@@ -39,6 +39,16 @@ variable "artifact_repository_location" {
   type        = string
 }
 
+variable "chart_artifact_repository_name" {
+  description = "Artifact Registry repository resource name to which CI receives Helm chart writer access."
+  type        = string
+}
+
+variable "chart_artifact_repository_location" {
+  description = "Location of the Helm chart Artifact Registry repository."
+  type        = string
+}
+
 variable "workload_identity_pool_id" {
   description = "ID of the GitHub Actions workload identity pool."
   type        = string
@@ -68,6 +78,10 @@ locals {
     reverse(split("/", var.artifact_repository_name)),
     0,
   )
+  chart_artifact_repository_id = element(
+    reverse(split("/", var.chart_artifact_repository_name)),
+    0,
+  )
   argo_kubernetes_service_accounts = toset([
     "argocd-application-controller",
     "argocd-server",
@@ -93,7 +107,7 @@ resource "google_iam_workload_identity_pool_provider" "github" {
     "attribute.ref"        = "assertion.ref"
   }
 
-  attribute_condition = "assertion.repository == '${var.github_repository}' && assertion.ref == 'refs/heads/main'"
+  attribute_condition = "assertion.repository == '${var.github_repository}' && (assertion.ref == 'refs/heads/main' || assertion.ref.startsWith('refs/tags/v'))"
 
   oidc {
     issuer_uri = "https://token.actions.githubusercontent.com"
@@ -104,7 +118,7 @@ resource "google_service_account" "ci" {
   project      = var.project_id
   account_id   = var.ci_service_account_id
   display_name = "Stock ticker CI"
-  description  = "Keyless GitHub Actions identity for publishing container images."
+  description  = "Keyless GitHub Actions identity for publishing container images and Helm charts."
 }
 
 resource "google_service_account_iam_member" "ci_workload_identity_user" {
@@ -117,6 +131,14 @@ resource "google_artifact_registry_repository_iam_member" "ci_writer" {
   project    = var.project_id
   location   = var.artifact_repository_location
   repository = local.artifact_repository_id
+  role       = "roles/artifactregistry.writer"
+  member     = "serviceAccount:${google_service_account.ci.email}"
+}
+
+resource "google_artifact_registry_repository_iam_member" "ci_chart_writer" {
+  project    = var.project_id
+  location   = var.chart_artifact_repository_location
+  repository = local.chart_artifact_repository_id
   role       = "roles/artifactregistry.writer"
   member     = "serviceAccount:${google_service_account.ci.email}"
 }
