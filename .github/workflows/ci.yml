@@ -17,8 +17,55 @@ env:
   TRIVY_VERSION: v0.74.0
 
 jobs:
+  changes:
+    name: Classify changes
+    runs-on: ubuntu-24.04
+    outputs:
+      values_only: ${{ steps.classify.outputs.values_only }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+
+      - name: Detect values-only promotion
+        id: classify
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PUSH_BEFORE_SHA: ${{ github.event.before }}
+          HEAD_SHA: ${{ github.sha }}
+        run: |
+          base_sha="${PUSH_BEFORE_SHA}"
+          head_sha="${HEAD_SHA}"
+          if [ "${EVENT_NAME}" = "pull_request" ]; then
+            base_sha="${PR_BASE_SHA}"
+            head_sha="${PR_HEAD_SHA}"
+          fi
+
+          values_only=false
+          if [[ "${base_sha}" =~ ^[0-9a-f]{40}$ ]] &&
+             [ "${base_sha}" != "0000000000000000000000000000000000000000" ]; then
+            mapfile -t changed_files < <(
+              git diff --name-only --diff-filter=ACDMRTUXB "${base_sha}" "${head_sha}"
+            )
+            if [ "${#changed_files[@]}" -gt 0 ]; then
+              values_only=true
+              for path in "${changed_files[@]}"; do
+                if [ "${path}" != "helm/stock-ticker-chart/values.yaml" ]; then
+                  values_only=false
+                  break
+                fi
+              done
+            fi
+          fi
+
+          printf 'values_only=%s\n' "${values_only}" >> "${GITHUB_OUTPUT}"
+
   go:
     name: Go tests and vet
+    needs: changes
     runs-on: ubuntu-24.04
     steps:
       - name: Check out repository
@@ -40,6 +87,7 @@ jobs:
 
   semgrep:
     name: Semgrep
+    needs: changes
     runs-on: ubuntu-24.04
     env:
       SEMGREP_APP_TOKEN: ${{ secrets.SEMGREP_APP_TOKEN }}
@@ -65,6 +113,7 @@ jobs:
 
   security:
     name: Helm, Trivy, and image
+    needs: changes
     runs-on: ubuntu-24.04
     steps:
       - name: Check out repository
@@ -102,17 +151,19 @@ jobs:
           trivy config --severity HIGH,CRITICAL --exit-code 1 "${RUNNER_TEMP}/stock-ticker.yaml"
 
       - name: Build image
+        if: ${{ needs.changes.outputs.values_only != 'true' }}
         run: docker build -t "stock-ticker:${GITHUB_SHA}" .
 
       - name: Scan image
+        if: ${{ needs.changes.outputs.values_only != 'true' }}
         run: trivy image --scanners vuln --severity HIGH,CRITICAL --exit-code 1 "stock-ticker:${GITHUB_SHA}"
 
       - name: Save tested image
-        if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+        if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && needs.changes.outputs.values_only != 'true' }}
         run: docker save "stock-ticker:${GITHUB_SHA}" | gzip > "${RUNNER_TEMP}/stock-ticker.tar.gz"
 
       - name: Upload tested image
-        if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+        if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && needs.changes.outputs.values_only != 'true' }}
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: tested-image
@@ -122,8 +173,9 @@ jobs:
 
   publish:
     name: Publish tested image
-    if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+    if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && needs.changes.outputs.values_only != 'true' }}
     needs:
+      - changes
       - go
       - semgrep
       - security
