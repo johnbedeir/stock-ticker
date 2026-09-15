@@ -8,11 +8,12 @@ terraform {
 }
 
 inputs = {
-  project_id             = include.root.locals.project_id
-  region                 = include.root.locals.region
-  github_repository      = "${include.root.locals.repository_owner}/${include.root.locals.repository_name}"
-  network_name           = "stock-ticker"
-  artifact_repository_id = "stock-ticker"
+  project_id                   = include.root.locals.project_id
+  region                       = include.root.locals.region
+  github_repository            = "${include.root.locals.repository_owner}/${include.root.locals.repository_name}"
+  network_name                 = "stock-ticker"
+  artifact_repository_id       = "stock-ticker"
+  chart_artifact_repository_id = "stock-ticker-charts"
 
   gke_prod_subnet_cidr     = "10.10.0.0/20"
   gke_prod_pods_cidr       = "10.20.0.0/16"
