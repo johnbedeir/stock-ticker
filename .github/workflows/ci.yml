@@ -1,0 +1,106 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+env:
+  HELM_VERSION: v4.2.4
+  SEMGREP_VERSION: 1.177.0
+  TRIVY_VERSION: v0.74.0
+
+jobs:
+  go:
+    name: Go tests and vet
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Set up Go
+        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
+        with:
+          go-version-file: app/go.mod
+          cache: false
+
+      - name: Test
+        working-directory: app
+        run: go test -race ./...
+
+      - name: Vet
+        working-directory: app
+        run: go vet ./...
+
+  semgrep:
+    name: Semgrep
+    runs-on: ubuntu-24.04
+    env:
+      SEMGREP_APP_TOKEN: ${{ secrets.SEMGREP_APP_TOKEN }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Set up Python
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: "3.12"
+
+      - name: Install pinned Semgrep
+        run: pip install "semgrep==${SEMGREP_VERSION}"
+
+      - name: Run configured Semgrep policy
+        if: ${{ env.SEMGREP_APP_TOKEN != '' }}
+        run: semgrep ci
+
+      - name: Run committed rules without a token
+        if: ${{ env.SEMGREP_APP_TOKEN == '' }}
+        run: semgrep scan --error --config .semgrep.yml
+
+  security:
+    name: Helm, Trivy, and image
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Set up Helm
+        uses: azure/setup-helm@1a275c3b69536ee54be43f2070a358922e12c8d4 # v4
+        with:
+          version: ${{ env.HELM_VERSION }}
+
+      - name: Set up Trivy
+        uses: aquasecurity/setup-trivy@81e514348e19b6112ce2a7e3ecbafe19c1e1f567 # v0.3.1
+        with:
+          version: ${{ env.TRIVY_VERSION }}
+          cache: true
+
+      - name: Lint and render Helm chart
+        run: |
+          helm lint helm/stock-ticker-chart
+          helm template stock-ticker helm/stock-ticker-chart > "${RUNNER_TEMP}/stock-ticker.yaml"
+
+      - name: Scan Go dependencies
+        run: trivy fs --scanners vuln --severity HIGH,CRITICAL --exit-code 1 app/
+
+      - name: Scan repository for secrets
+        run: trivy fs --scanners secret --exit-code 1 .
+
+      - name: Scan configuration
+        run: |
+          for target in Dockerfile kubernetes helm terraform; do
+            if [ -e "${target}" ]; then
+              trivy config --severity HIGH,CRITICAL --exit-code 1 "${target}"
+            fi
+          done
+          trivy config --severity HIGH,CRITICAL --exit-code 1 "${RUNNER_TEMP}/stock-ticker.yaml"
+
+      - name: Build image
+        run: docker build -t "stock-ticker:${GITHUB_SHA}" .
+
+      - name: Scan image
+        run: trivy image --scanners vuln --severity HIGH,CRITICAL --exit-code 1 "stock-ticker:${GITHUB_SHA}"

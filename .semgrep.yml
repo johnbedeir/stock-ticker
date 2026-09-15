@@ -1,0 +1,26 @@
+rules:
+  - id: go-insecure-tls
+    message: TLS certificate verification must not be disabled.
+    severity: ERROR
+    languages: [go]
+    pattern-either:
+      - pattern: 'tls.Config{..., InsecureSkipVerify: true, ...}'
+      - pattern: '&tls.Config{..., InsecureSkipVerify: true, ...}'
+
+  - id: go-shell-command
+    message: Avoid executing dynamic commands through a shell.
+    severity: ERROR
+    languages: [go]
+    pattern-either:
+      - pattern: exec.Command("sh", "-c", $CMD)
+      - pattern: exec.Command("bash", "-c", $CMD)
+
+  - id: go-api-key-in-log
+    message: API keys must not be written to logs.
+    severity: ERROR
+    languages: [go]
+    pattern-either:
+      - pattern: $LOGGER.Info(..., "apikey", ...)
+      - pattern: $LOGGER.Warn(..., "apikey", ...)
+      - pattern: $LOGGER.Error(..., "apikey", ...)
+      - pattern: $LOGGER.Debug(..., "apikey", ...)
