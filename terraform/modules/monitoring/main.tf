@@ -132,6 +132,17 @@ locals {
       enabled = true
       alertmanagerSpec = {
         retention = "120h"
+        alertmanagerConfigSelector = {
+          matchLabels = {
+            "alertmanager.stock-ticker/enabled" = "true"
+          }
+        }
+        alertmanagerConfigNamespaceSelector = {
+          matchLabels = local.monitoring_label
+        }
+        alertmanagerConfigMatcherStrategy = {
+          type = "None"
+        }
         resources = {
           requests = {
             cpu    = "50m"

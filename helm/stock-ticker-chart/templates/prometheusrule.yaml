@@ -1,0 +1,28 @@
+{{- if .Values.alerts.enabled }}
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: {{ .Release.Name }}
+  labels:
+    app.kubernetes.io/name: stock-ticker
+    app.kubernetes.io/instance: {{ .Release.Name }}
+spec:
+  groups:
+    - name: stock-ticker
+      rules:
+        - alert: StockTickerUnavailable
+          expr: kube_deployment_status_replicas_available{namespace="{{ .Release.Namespace }}", deployment="{{ .Release.Name }}"} < 1
+          for: {{ .Values.alerts.unavailableFor }}
+          labels:
+            severity: critical
+          annotations:
+            summary: Stock ticker is unavailable
+            description: No stock-ticker replicas have been available for {{ .Values.alerts.unavailableFor }}.
+        - alert: StockTickerPodRestarted
+          expr: increase(kube_pod_container_status_restarts_total{namespace="{{ .Release.Namespace }}", container="stock-ticker"}[{{ .Values.alerts.restartWindow }}]) > 0
+          labels:
+            severity: warning
+          annotations:
+            summary: Stock ticker container restarted
+            description: A stock-ticker container restarted during the last {{ .Values.alerts.restartWindow }}.
+{{- end }}
