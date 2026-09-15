@@ -1,0 +1,13 @@
+# Secrets
+.env
+.env.*
+kubernetes/secret.yaml
+
+# Go outputs
+app/server
+app/stock-ticker
+*.test
+coverage.out
+
+# macOS
+.DS_Store

@@ -1,0 +1,6 @@
+References/
+.git/
+.gitignore
+*.md
+Ping_SRE_*
+README*
