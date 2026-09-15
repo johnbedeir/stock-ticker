@@ -1,0 +1,11 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: stock-ticker
+  namespace: stock-ticker
+data:
+  SYMBOL: MSFT
+  NDAYS: "7"
+  PORT: "8080"
+  ALPHAVANTAGE_FUNCTION: TIME_SERIES_DAILY
+  CACHE_TTL: 12h
