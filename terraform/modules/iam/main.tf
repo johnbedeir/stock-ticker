@@ -68,6 +68,10 @@ locals {
     reverse(split("/", var.artifact_repository_name)),
     0,
   )
+  argo_kubernetes_service_accounts = toset([
+    "argocd-application-controller",
+    "argocd-server",
+  ])
 }
 
 resource "google_iam_workload_identity_pool" "github" {
@@ -128,6 +132,14 @@ resource "google_project_iam_member" "argo_cluster_viewer" {
   project = var.project_id
   role    = "roles/container.clusterViewer"
   member  = "serviceAccount:${google_service_account.argo.email}"
+}
+
+resource "google_service_account_iam_member" "argo_workload_identity_user" {
+  for_each = local.argo_kubernetes_service_accounts
+
+  service_account_id = google_service_account.argo.name
+  role               = "roles/iam.workloadIdentityUser"
+  member             = "serviceAccount:${var.project_id}.svc.id.goog[argocd/${each.value}]"
 }
 
 output "ci_service_account_email" {

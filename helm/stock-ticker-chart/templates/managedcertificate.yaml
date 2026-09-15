@@ -1,0 +1,12 @@
+{{- if .Values.managedCertificate.enabled }}
+apiVersion: networking.gke.io/v1
+kind: ManagedCertificate
+metadata:
+  name: {{ .Release.Name }}
+  labels:
+    app.kubernetes.io/name: stock-ticker
+    app.kubernetes.io/instance: {{ .Release.Name }}
+spec:
+  domains:
+    {{- toYaml .Values.managedCertificate.domains | nindent 4 }}
+{{- end }}

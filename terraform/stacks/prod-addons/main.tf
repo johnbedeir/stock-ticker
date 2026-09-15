@@ -31,6 +31,12 @@ resource "kubernetes_role_v1" "argo_stock_ticker" {
   }
 
   rule {
+    api_groups = ["*"]
+    resources  = ["*"]
+    verbs      = ["get", "list", "watch"]
+  }
+
+  rule {
     api_groups = [""]
     resources  = ["configmaps", "services"]
     verbs      = ["get", "list", "watch", "create", "update", "patch", "delete"]
@@ -43,6 +49,12 @@ resource "kubernetes_role_v1" "argo_stock_ticker" {
   }
 
   rule {
+    api_groups = [""]
+    resources  = ["pods/log"]
+    verbs      = ["get"]
+  }
+
+  rule {
     api_groups = ["apps"]
     resources  = ["deployments", "replicasets"]
     verbs      = ["get", "list", "watch", "create", "update", "patch", "delete"]
@@ -51,6 +63,12 @@ resource "kubernetes_role_v1" "argo_stock_ticker" {
   rule {
     api_groups = ["autoscaling"]
     resources  = ["horizontalpodautoscalers"]
+    verbs      = ["get", "list", "watch", "create", "update", "patch", "delete"]
+  }
+
+  rule {
+    api_groups = ["networking.gke.io"]
+    resources  = ["managedcertificates"]
     verbs      = ["get", "list", "watch", "create", "update", "patch", "delete"]
   }
 
@@ -98,6 +116,11 @@ resource "google_compute_address" "prometheus_proxy" {
   name         = "gke-prod-prometheus"
   address_type = "INTERNAL"
   subnetwork   = var.prod_subnetwork
+}
+
+resource "google_compute_global_address" "stock_ticker" {
+  project = var.project_id
+  name    = "stock-ticker-prod"
 }
 
 resource "random_password" "prometheus_proxy" {
@@ -356,5 +379,12 @@ resource "kubernetes_service_v1" "prometheus_proxy" {
       target_port = "https"
       protocol    = "TCP"
     }
+  }
+
+  lifecycle {
+    ignore_changes = [
+      metadata[0].annotations["cloud.google.com/neg"],
+      metadata[0].annotations["networking.gke.io/backend-service"],
+    ]
   }
 }
