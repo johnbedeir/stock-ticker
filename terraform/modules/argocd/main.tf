@@ -29,6 +29,10 @@ locals {
     },
     {
       group = "monitoring.coreos.com"
+      kind  = "PrometheusRule"
+    },
+    {
+      group = "monitoring.coreos.com"
       kind  = "ServiceMonitor"
     },
     {

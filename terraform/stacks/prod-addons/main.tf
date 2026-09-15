@@ -17,6 +17,19 @@ module "monitoring" {
   grafana_enabled = false
 }
 
+resource "helm_release" "stock_ticker_alerting" {
+  name      = "stock-ticker-alerting"
+  namespace = module.monitoring.namespace
+  chart     = "${path.module}/alerting-chart"
+
+  atomic          = true
+  cleanup_on_fail = true
+  timeout         = 300
+  wait            = true
+
+  depends_on = [module.monitoring]
+}
+
 resource "kubernetes_namespace_v1" "stock_ticker" {
   metadata {
     name   = "stock-ticker"
@@ -86,7 +99,7 @@ resource "kubernetes_role_v1" "argo_stock_ticker" {
 
   rule {
     api_groups = ["monitoring.coreos.com"]
-    resources  = ["servicemonitors"]
+    resources  = ["prometheusrules", "servicemonitors"]
     verbs      = ["get", "list", "watch", "create", "update", "patch", "delete"]
   }
 }

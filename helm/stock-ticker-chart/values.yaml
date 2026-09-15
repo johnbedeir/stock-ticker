@@ -76,6 +76,11 @@ serviceMonitor:
   clusterLabel: gke-prod
   labels: {}
 
+alerts:
+  enabled: true
+  unavailableFor: 30s
+  restartWindow: 5m
+
 topologySpread:
   enabled: true
   maxSkew: 1
