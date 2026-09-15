@@ -217,7 +217,8 @@ jobs:
           git commit -m "chore(release): promote ${SOURCE_SHA}"
 
           remote_sha="$(
-            git rev-parse "refs/remotes/origin/${RELEASE_BRANCH}" 2>/dev/null || true
+            git rev-parse --verify --quiet \
+              "refs/remotes/origin/${RELEASE_BRANCH}" || true
           )"
           if [ -n "${remote_sha}" ]; then
             git push \
