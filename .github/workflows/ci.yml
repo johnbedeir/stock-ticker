@@ -10,6 +10,8 @@ permissions:
   contents: read
 
 env:
+  GAR_HOST: us-east1-docker.pkg.dev
+  IMAGE_NAME: us-east1-docker.pkg.dev/johnydev/stock-ticker/stock-ticker
   HELM_VERSION: v4.2.4
   SEMGREP_VERSION: 1.177.0
   TRIVY_VERSION: v0.74.0
@@ -104,3 +106,83 @@ jobs:
 
       - name: Scan image
         run: trivy image --scanners vuln --severity HIGH,CRITICAL --exit-code 1 "stock-ticker:${GITHUB_SHA}"
+
+      - name: Save tested image
+        if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+        run: docker save "stock-ticker:${GITHUB_SHA}" | gzip > "${RUNNER_TEMP}/stock-ticker.tar.gz"
+
+      - name: Upload tested image
+        if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: tested-image
+          path: ${{ runner.temp }}/stock-ticker.tar.gz
+          if-no-files-found: error
+          retention-days: 1
+
+  publish:
+    name: Publish tested image
+    if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+    needs:
+      - go
+      - semgrep
+      - security
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Download tested image
+        uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5
+        with:
+          name: tested-image
+          path: ${{ runner.temp }}
+
+      - name: Load tested image
+        run: gunzip -c "${RUNNER_TEMP}/stock-ticker.tar.gz" | docker load
+
+      - name: Authenticate to Google Cloud
+        id: auth
+        uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3
+        with:
+          token_format: access_token
+          workload_identity_provider: projects/799354089730/locations/global/workloadIdentityPools/github-actions/providers/github
+          service_account: stock-ticker-ci@johnydev.iam.gserviceaccount.com
+
+      - name: Log in to Artifact Registry
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
+        with:
+          registry: ${{ env.GAR_HOST }}
+          username: oauth2accesstoken
+          password: ${{ steps.auth.outputs.access_token }}
+
+      - name: Publish tested image
+        id: publish
+        env:
+          SOURCE_IMAGE: stock-ticker:${{ github.sha }}
+          TARGET_IMAGE: ${{ env.IMAGE_NAME }}:${{ github.sha }}
+        run: |
+          docker tag "${SOURCE_IMAGE}" "${TARGET_IMAGE}"
+          docker push "${TARGET_IMAGE}"
+          digest="$(docker inspect --format='{{index .RepoDigests 0}}' "${TARGET_IMAGE}")"
+          test -n "${digest}"
+          printf 'digest=%s\n' "${digest}" >> "${GITHUB_OUTPUT}"
+
+      - name: Record release metadata
+        env:
+          IMAGE_DIGEST: ${{ steps.publish.outputs.digest }}
+          SOURCE_SHA: ${{ github.sha }}
+        run: |
+          jq -n \
+            --arg image_digest "${IMAGE_DIGEST}" \
+            --arg source_sha "${SOURCE_SHA}" \
+            '{image_digest: $image_digest, source_sha: $source_sha}' \
+            > "${RUNNER_TEMP}/image-metadata.json"
+
+      - name: Upload release metadata
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: release-metadata
+          path: ${{ runner.temp }}/image-metadata.json
+          if-no-files-found: error
+          retention-days: 30
