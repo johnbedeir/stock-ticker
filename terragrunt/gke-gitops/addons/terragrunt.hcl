@@ -27,8 +27,8 @@ dependency "prod_addons" {
   }
 }
 
-dependencies {
-  paths = ["../../shared"]
+dependency "shared" {
+  config_path = "../../shared"
 }
 
 inputs = {
@@ -39,6 +39,10 @@ inputs = {
   cluster_ca_certificate         = dependency.cluster.outputs.cluster_ca_certificate
   prod_cluster_endpoint          = dependency.prod_cluster.outputs.endpoint
   prod_cluster_ca_certificate    = dependency.prod_cluster.outputs.cluster_ca_certificate
+  prod_cluster_name              = "gke-prod"
+  argo_service_account_email     = dependency.shared.outputs.argo_service_account_email
+  repository_url                 = "https://github.com/${include.root.locals.repository_owner}/${include.root.locals.repository_name}.git"
+  target_revision                = "main"
   prod_prometheus_url            = dependency.prod_addons.outputs.prometheus_proxy_url
   prod_prometheus_username       = dependency.prod_addons.outputs.prometheus_proxy_username
   prod_prometheus_password       = dependency.prod_addons.outputs.prometheus_proxy_password

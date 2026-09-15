@@ -20,3 +20,8 @@ output "prometheus_proxy_ca_certificate" {
   value       = tls_self_signed_cert.prometheus_proxy.cert_pem
   sensitive   = true
 }
+
+output "stock_ticker_ingress_ip" {
+  description = "Reserved public IP for stock.johnydev.com."
+  value       = google_compute_global_address.stock_ticker.address
+}

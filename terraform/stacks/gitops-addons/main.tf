@@ -23,3 +23,17 @@ module "monitoring" {
   prod_prometheus_password       = var.prod_prometheus_password
   prod_prometheus_ca_certificate = var.prod_prometheus_ca_certificate
 }
+
+module "argocd" {
+  source = "../../modules/argocd"
+
+  namespace                   = kubernetes_namespace_v1.argocd.metadata[0].name
+  argo_service_account_email  = var.argo_service_account_email
+  prod_cluster_name           = var.prod_cluster_name
+  prod_cluster_endpoint       = var.prod_cluster_endpoint
+  prod_cluster_ca_certificate = var.prod_cluster_ca_certificate
+  repository_url              = var.repository_url
+  target_revision             = var.target_revision
+
+  depends_on = [module.monitoring]
+}

@@ -1,9 +1,9 @@
 replicaCount: 2
 
 image:
-  repository: stock-ticker
-  tag: local
-  digest: ""
+  repository: us-east1-docker.pkg.dev/johnydev/stock-ticker/stock-ticker
+  tag: 973cb861a6facbcd4926f57b5b0aff36c2b2d85d
+  digest: sha256:8e4127c3ab58ee6db5ff2ec61bc2122e52eba2f7971c8ca3711058416c99e893
   pullPolicy: IfNotPresent
 
 existingSecret: stock-ticker-api
@@ -25,9 +25,16 @@ ingress:
   className: ""
   annotations:
     kubernetes.io/ingress.class: gce
-  host: stock-ticker.example.com
+    kubernetes.io/ingress.global-static-ip-name: stock-ticker-prod
+    networking.gke.io/managed-certificates: stock-ticker
+  host: stock.johnydev.com
   path: /
   pathType: Exact
+
+managedCertificate:
+  enabled: true
+  domains:
+    - stock.johnydev.com
 
 strategy:
   type: RollingUpdate
@@ -64,7 +71,7 @@ podDisruptionBudget:
   minAvailable: 1
 
 serviceMonitor:
-  enabled: false
+  enabled: true
   interval: 30s
   clusterLabel: gke-prod
   labels: {}
