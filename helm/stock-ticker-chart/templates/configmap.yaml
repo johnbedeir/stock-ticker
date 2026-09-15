@@ -1,0 +1,13 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Release.Name }}
+  labels:
+    app.kubernetes.io/name: stock-ticker
+    app.kubernetes.io/instance: {{ .Release.Name }}
+data:
+  SYMBOL: {{ .Values.config.symbol | quote }}
+  NDAYS: {{ .Values.config.nDays | quote }}
+  PORT: {{ .Values.config.port | quote }}
+  ALPHAVANTAGE_FUNCTION: {{ .Values.config.function | quote }}
+  CACHE_TTL: {{ .Values.config.cacheTTL | quote }}

@@ -1,0 +1,75 @@
+replicaCount: 2
+
+image:
+  repository: stock-ticker
+  tag: local
+  digest: ""
+  pullPolicy: IfNotPresent
+
+existingSecret: stock-ticker-api
+
+config:
+  symbol: MSFT
+  nDays: 7
+  port: 8080
+  function: TIME_SERIES_DAILY
+  cacheTTL: 12h
+
+service:
+  port: 80
+  annotations:
+    cloud.google.com/neg: '{"ingress": true}'
+
+ingress:
+  enabled: true
+  className: ""
+  annotations:
+    kubernetes.io/ingress.class: gce
+  host: stock-ticker.example.com
+  path: /
+  pathType: Exact
+
+strategy:
+  type: RollingUpdate
+  rollingUpdate:
+    maxUnavailable: 0
+    maxSurge: 1
+
+probes:
+  readiness:
+    path: /ready
+    initialDelaySeconds: 2
+    periodSeconds: 5
+  liveness:
+    path: /health
+    initialDelaySeconds: 5
+    periodSeconds: 10
+
+resources:
+  requests:
+    cpu: 25m
+    memory: 32Mi
+  limits:
+    cpu: 250m
+    memory: 128Mi
+
+autoscaling:
+  enabled: true
+  minReplicas: 2
+  maxReplicas: 3
+  targetCPUUtilizationPercentage: 80
+
+podDisruptionBudget:
+  enabled: true
+  minAvailable: 1
+
+serviceMonitor:
+  enabled: false
+  interval: 30s
+  labels: {}
+
+topologySpread:
+  enabled: true
+  maxSkew: 1
+  topologyKey: topology.kubernetes.io/zone
+  whenUnsatisfiable: ScheduleAnyway
