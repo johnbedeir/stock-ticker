@@ -1,0 +1,18 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: stock-ticker
+  namespace: stock-ticker
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: stock-ticker.local
+      http:
+        paths:
+          - path: /
+            pathType: Exact
+            backend:
+              service:
+                name: stock-ticker
+                port:
+                  name: http
