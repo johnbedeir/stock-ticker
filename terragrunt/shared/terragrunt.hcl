@@ -15,10 +15,10 @@ inputs = {
   artifact_repository_id       = "stock-ticker"
   chart_artifact_repository_id = "stock-ticker-charts"
 
-  gke_prod_subnet_cidr     = "10.10.0.0/20"
-  gke_prod_pods_cidr       = "10.20.0.0/16"
-  gke_prod_services_cidr   = "10.30.0.0/20"
-  gke_gitops_subnet_cidr   = "10.11.0.0/20"
-  gke_gitops_pods_cidr     = "10.21.0.0/16"
-  gke_gitops_services_cidr = "10.31.0.0/20"
+  gke_prod_subnet_cidr     = include.root.locals.gke_prod_subnet_cidr
+  gke_prod_pods_cidr       = include.root.locals.gke_prod_pods_cidr
+  gke_prod_services_cidr   = include.root.locals.gke_prod_services_cidr
+  gke_gitops_subnet_cidr   = include.root.locals.gke_gitops_subnet_cidr
+  gke_gitops_pods_cidr     = include.root.locals.gke_gitops_pods_cidr
+  gke_gitops_services_cidr = include.root.locals.gke_gitops_services_cidr
 }

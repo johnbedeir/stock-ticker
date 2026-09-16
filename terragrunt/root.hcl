@@ -8,7 +8,14 @@ locals {
 
   repository_owner = "johnbedeir"
   repository_name  = "stock-ticker"
-  operator_cidr    = "75.43.53.182/32"
+  operator_cidr    = get_env("OPERATOR_CIDR")
+
+  gke_prod_subnet_cidr     = "10.10.0.0/20"
+  gke_prod_pods_cidr       = "10.20.0.0/16"
+  gke_prod_services_cidr   = "10.30.0.0/20"
+  gke_gitops_subnet_cidr   = "10.11.0.0/20"
+  gke_gitops_pods_cidr     = "10.21.0.0/16"
+  gke_gitops_services_cidr = "10.31.0.0/20"
 }
 
 remote_state {

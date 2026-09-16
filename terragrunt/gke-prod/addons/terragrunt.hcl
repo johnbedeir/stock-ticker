@@ -22,7 +22,7 @@ inputs = {
   cluster_endpoint           = dependency.cluster.outputs.endpoint
   cluster_ca_certificate     = dependency.cluster.outputs.cluster_ca_certificate
   prod_subnetwork            = dependency.shared.outputs.subnet_self_links["gke-prod"]
-  gitops_pod_cidr            = "10.21.0.0/16"
-  gitops_node_cidr           = "10.11.0.0/20"
+  gitops_pod_cidr            = include.root.locals.gke_gitops_pods_cidr
+  gitops_node_cidr           = include.root.locals.gke_gitops_subnet_cidr
   argo_service_account_email = dependency.shared.outputs.argo_service_account_email
 }

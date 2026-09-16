@@ -1,7 +1,7 @@
 # Stock Ticker
 
 <p align="center">
-  <img src="cover.png" alt="Stock Ticker">
+  <img src="docs/cover.png" alt="Stock Ticker">
 </p>
 
 Go service that returns recent stock closing prices and their average. The
@@ -10,11 +10,14 @@ application can run locally, in Docker, in Minikube, or on GKE through Argo CD.
 Production: <https://stock.johnydev.com/>
 Repository: <https://github.com/johnbedeir/stock-ticker>
 
-## Quick start
+## Reviewer quick start
 
-- [Run the application locally, with Docker, or in Minikube](app/README.md)
-- [Build and operate the GCP infrastructure with Terragrunt](terragrunt/README.md)
-- [Review the GitOps release flow](.github/RELEASES.md)
+1. Check the live service: `curl https://stock.johnydev.com/`
+2. Pull the public image: `docker pull us-east1-docker.pkg.dev/johnydev/stock-ticker/stock-ticker:v1.0.0`
+3. Run local tests: `cd app && go test -race ./... && go vet ./...`
+4. Follow the [local, Docker, or Minikube guide](app/README.md).
+5. Review the [infrastructure](terragrunt/README.md) and
+   [release flow](.github/RELEASES.md).
 
 ## What each part does
 
@@ -47,6 +50,30 @@ Repository: <https://github.com/johnbedeir/stock-ticker>
 - [CI](https://github.com/johnbedeir/stock-ticker/actions) completed successfully.
 - Prometheus and Alertmanager delivered and resolved an availability alert in Slack.
 
+## Screenshots
+
+**Production response**
+
+<img src="docs/screenshots/production.png" alt="Production stock ticker response" width="800">
+
+**Argo CD**
+
+<img src="docs/screenshots/argocd.png" alt="Argo CD application synced and healthy" width="800">
+
+**Grafana**
+
+<img src="docs/screenshots/grafana.png" alt="Grafana multi-cluster dashboard" width="800">
+
+**Slack alert**
+
+<img src="docs/screenshots/scaledown.png" alt="Stock ticker Slack alert" width="800">
+
+<img src="docs/screenshots/slack-alert.png" alt="Stock ticker Slack alert" width="800">
+
+**CI & Release pipelines**
+
+<img src="docs/screenshots/ci.png" alt="Successful GitHub Actions CI pipeline" width="800">
+
 ## Tested versions
 
 - Go 1.27.1
@@ -54,5 +81,4 @@ Repository: <https://github.com/johnbedeir/stock-ticker>
 - Helm 4.2.4 and Minikube 1.39.0
 - GKE 1.35.7, Argo CD chart 8.2.4, kube-prometheus-stack 90.2.0
 
-See the [infrastructure guide](terragrunt/README.md#tear-down) for safe
-teardown commands.
+See the [infrastructure guide](terragrunt/README.md#tear-down) for safe teardown commands.
