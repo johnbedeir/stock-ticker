@@ -52,27 +52,29 @@ Repository: <https://github.com/johnbedeir/stock-ticker>
 
 ## Screenshots
 
-**Production response**
+### Production response
 
 <img src="docs/screenshots/production.png" alt="Production stock ticker response" width="800">
 
-**Argo CD**
+### Argo CD
 
 <img src="docs/screenshots/argocd.png" alt="Argo CD application synced and healthy" width="800">
 
-**Grafana**
+### Grafana
 
 <img src="docs/screenshots/grafana.png" alt="Grafana multi-cluster dashboard" width="800">
 
-**Slack alert**
+### Slack alert
 
 <img src="docs/screenshots/scaledown.png" alt="Stock ticker Slack alert" width="800">
 
 <img src="docs/screenshots/slack-alert.png" alt="Stock ticker Slack alert" width="800">
 
-**CI & Release pipelines**
+### CI & Release pipelines
 
 <img src="docs/screenshots/ci.png" alt="Successful GitHub Actions CI pipeline" width="800">
+
+<img src="docs/screenshots/release.png" alt="Successful GitHub Actions CI pipeline" width="800">
 
 ## Tested versions
 
