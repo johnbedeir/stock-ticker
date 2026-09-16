@@ -30,6 +30,12 @@ variable "description" {
   default     = "Stock ticker container images"
 }
 
+variable "public_read" {
+  description = "Allow anonymous users to download artifacts from the repository."
+  type        = bool
+  default     = false
+}
+
 resource "google_artifact_registry_repository" "this" {
   project       = var.project_id
   location      = var.region
@@ -41,6 +47,16 @@ resource "google_artifact_registry_repository" "this" {
   docker_config {
     immutable_tags = true
   }
+}
+
+resource "google_artifact_registry_repository_iam_member" "public_reader" {
+  count = var.public_read ? 1 : 0
+
+  project    = var.project_id
+  location   = var.region
+  repository = google_artifact_registry_repository.this.repository_id
+  role       = "roles/artifactregistry.reader"
+  member     = "allUsers"
 }
 
 output "repository_id" {

@@ -165,6 +165,7 @@ module "artifact_registry" {
   project_id    = var.project_id
   region        = var.region
   repository_id = var.artifact_repository_id
+  public_read   = true
 
   depends_on = [google_project_service.required]
 }
