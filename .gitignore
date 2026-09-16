@@ -3,11 +3,22 @@
 .env.*
 kubernetes/secret.yaml
 
+# Local source references (not part of this repository)
+References/
+
 # Go outputs
 app/server
 app/stock-ticker
 *.test
 coverage.out
 
+# Terraform and Terragrunt working files
+.terraform/
+.terragrunt-cache/
+*.tfplan
+crash.log
+crash.*.log
+
+*.pem
 # macOS
 .DS_Store
