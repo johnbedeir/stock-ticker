@@ -1,4 +1,4 @@
-name: Helm Release
+name: Release
 
 on:
   release:
@@ -10,18 +10,20 @@ permissions:
   id-token: write
 
 concurrency:
-  group: helm-chart-${{ github.event.release.tag_name }}
+  group: release-artifacts-${{ github.event.release.tag_name }}
   cancel-in-progress: false
 
 env:
   GAR_HOST: us-east1-docker.pkg.dev
+  IMAGE_NAME: us-east1-docker.pkg.dev/johnydev/stock-ticker/stock-ticker
   OCI_REPOSITORY: oci://us-east1-docker.pkg.dev/johnydev/stock-ticker-charts
   CHART_PATH: helm/stock-ticker-chart
+  VALUES_FILE: helm/stock-ticker-chart/values.yaml
   HELM_VERSION: v4.2.4
 
 jobs:
   publish:
-    name: Publish OCI chart
+    name: Publish Docker image and Helm chart
     runs-on: ubuntu-24.04
     steps:
       - name: Validate release version
@@ -40,26 +42,6 @@ jobs:
         with:
           ref: ${{ github.event.release.tag_name }}
 
-      - name: Set up Helm
-        uses: azure/setup-helm@1a275c3b69536ee54be43f2070a358922e12c8d4 # v4
-        with:
-          version: ${{ env.HELM_VERSION }}
-
-      - name: Validate Helm chart
-        run: |
-          helm lint "${CHART_PATH}"
-          helm template stock-ticker "${CHART_PATH}" > "${RUNNER_TEMP}/stock-ticker.yaml"
-
-      - name: Package immutable Helm chart
-        env:
-          CHART_VERSION: ${{ steps.version.outputs.version }}
-        run: |
-          mkdir -p "${RUNNER_TEMP}/charts"
-          helm package "${CHART_PATH}" \
-            --destination "${RUNNER_TEMP}/charts" \
-            --version "${CHART_VERSION}" \
-            --app-version "${CHART_VERSION}"
-
       - name: Authenticate to Google Cloud
         id: auth
         uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3
@@ -68,7 +50,60 @@ jobs:
           workload_identity_provider: projects/799354089730/locations/global/workloadIdentityPools/github-actions/providers/github
           service_account: stock-ticker-ci@johnydev.iam.gserviceaccount.com
 
-      - name: Log in to Artifact Registry
+      - name: Tag tested Docker image for release
+        env:
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+        run: |
+          repository="$(awk '$1 == "repository:" { print $2; exit }' "${VALUES_FILE}")"
+          digest="$(awk '$1 == "digest:" { print $2; exit }' "${VALUES_FILE}")"
+
+          if [ "${repository}" != "${IMAGE_NAME}" ]; then
+            echo "Chart image repository does not match ${IMAGE_NAME}." >&2
+            exit 1
+          fi
+          if [[ ! "${digest}" =~ ^sha256:[0-9a-f]{64}$ ]]; then
+            echo "Chart values contain an invalid image digest." >&2
+            exit 1
+          fi
+
+          target="${IMAGE_NAME}:${RELEASE_TAG}"
+          existing="$(
+            gcloud artifacts docker images describe "${target}" \
+              --format='value(image_summary.digest)' 2>/dev/null || true
+          )"
+          if [ -n "${existing}" ] && [ "${existing}" != "${digest}" ]; then
+            echo "${target} already points to a different immutable digest." >&2
+            exit 1
+          fi
+          if [ "${existing}" = "${digest}" ]; then
+            echo "${target} already points to ${digest}."
+          else
+            gcloud artifacts docker tags add \
+              "${IMAGE_NAME}@${digest}" \
+              "${target}"
+          fi
+
+          echo "docker_image=${target}" >> "${GITHUB_ENV}"
+          echo "docker_digest=${digest}" >> "${GITHUB_ENV}"
+
+      - name: Set up Helm
+        uses: azure/setup-helm@1a275c3b69536ee54be43f2070a358922e12c8d4 # v4
+        with:
+          version: ${{ env.HELM_VERSION }}
+
+      - name: Validate and package Helm chart
+        env:
+          CHART_VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          helm lint "${CHART_PATH}"
+          helm template stock-ticker "${CHART_PATH}" > "${RUNNER_TEMP}/stock-ticker.yaml"
+          mkdir -p "${RUNNER_TEMP}/charts"
+          helm package "${CHART_PATH}" \
+            --destination "${RUNNER_TEMP}/charts" \
+            --version "${CHART_VERSION}" \
+            --app-version "${CHART_VERSION}"
+
+      - name: Log in to Artifact Registry for Helm
         env:
           ACCESS_TOKEN: ${{ steps.auth.outputs.access_token }}
         run: |
@@ -76,10 +111,16 @@ jobs:
             --username oauth2accesstoken \
             --password-stdin
 
-      - name: Publish OCI chart
+      - name: Publish OCI Helm chart
         env:
           CHART_VERSION: ${{ steps.version.outputs.version }}
         run: |
           helm push \
             "${RUNNER_TEMP}/charts/stock-ticker-chart-${CHART_VERSION}.tgz" \
             "${OCI_REPOSITORY}"
+          echo "helm_chart=${OCI_REPOSITORY}/stock-ticker-chart:${CHART_VERSION}" >> "${GITHUB_ENV}"
+
+      - name: Summarize release artifacts
+        run: |
+          echo "Published Docker image: ${docker_image} (${docker_digest})"
+          echo "Published Helm chart: ${helm_chart}"
