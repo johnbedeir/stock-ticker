@@ -10,8 +10,11 @@ clusters, Argo CD, monitoring, and the production application.
 - Google Cloud CLI with `gke-gcloud-auth-plugin`
 - `kubectl`
 
-Update `operator_cidr` in `terragrunt/root.hcl` with your public IP before
-applying.
+Set your public IP before running Terragrunt:
+
+```bash
+export OPERATOR_CIDR="$(curl -fsS https://checkip.amazonaws.com)/32"
+```
 
 ## Authenticate
 
@@ -98,6 +101,7 @@ monitoring namespace:
 ```bash
 gcloud container clusters get-credentials gke-prod \
   --region us-east1 --project johnydev
+
 read -s SLACK_WEBHOOK_URL
 kubectl -n monitoring create secret generic stock-ticker-slack-webhook \
   --from-literal=url="$SLACK_WEBHOOK_URL" \
@@ -151,12 +155,74 @@ Open <https://127.0.0.1:8443>, sign in as `admin`, and verify that
 
 ## Tear down
 
-Terragrunt destroys addons, clusters, and shared resources in dependency order:
+Do not use `terragrunt run --all destroy`. Remove resources in this order so
+Argo CD can clean up the application before either cluster is deleted.
+
+Back up monitoring PVC data first if it must be retained.
+
+### 1. Delete the application
 
 ```bash
-cd terragrunt
-terragrunt run --all destroy
+gcloud container clusters get-credentials gke-gitops \
+  --region us-east1 --project johnydev
+kubectl -n argocd delete application stock-ticker \
+  --wait=true --timeout=15m
 ```
 
-The `johnydev-stock-ticker-tfstate` bucket is not deleted by these commands.
-Remove the external DNS `stock` record after teardown.
+The Argo CD finalizer deletes the application resources from production.
+
+### 2. Destroy the addon units
+
+Destroy GitOps addons first, then production addons:
+
+```bash
+cd "$(git rev-parse --show-toplevel)/terragrunt/gke-gitops/addons"
+terragrunt plan -destroy -out=tfplan
+terragrunt apply tfplan
+rm -f tfplan
+
+cd ../../gke-prod/addons
+terragrunt plan -destroy -out=tfplan
+terragrunt apply tfplan
+rm -f tfplan
+```
+
+### 3. Destroy the cluster units
+
+Both clusters have deletion protection. Apply `false`, then destroy each
+cluster:
+
+```bash
+cd "$(git rev-parse --show-toplevel)/terragrunt/gke-gitops/cluster"
+terragrunt plan -out=tfplan -var='deletion_protection=false'
+terragrunt apply tfplan
+rm -f tfplan
+terragrunt plan -destroy -out=tfplan -var='deletion_protection=false'
+terragrunt apply tfplan
+rm -f tfplan
+
+cd ../../gke-prod/cluster
+terragrunt plan -out=tfplan -var='deletion_protection=false'
+terragrunt apply tfplan
+rm -f tfplan
+terragrunt plan -destroy -out=tfplan -var='deletion_protection=false'
+terragrunt apply tfplan
+rm -f tfplan
+```
+
+### 4. Destroy dedicated shared resources
+
+Review the shared destroy plan. Run it only if the VPC, registries, and IAM
+resources are dedicated to this exercise:
+
+```bash
+cd "$(git rev-parse --show-toplevel)/terragrunt/shared"
+terragrunt plan -destroy -out=tfplan
+terragrunt apply tfplan
+rm -f tfplan
+```
+
+Finally, remove the external DNS record and revoke the Slack webhook and API
+key if they were created only for this exercise. The Terraform state bucket is
+intentionally preserved. Published registries may need to be emptied before
+Terraform can delete them.

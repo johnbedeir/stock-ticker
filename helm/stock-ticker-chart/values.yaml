@@ -2,8 +2,8 @@ replicaCount: 2
 
 image:
   repository: us-east1-docker.pkg.dev/johnydev/stock-ticker/stock-ticker
-  tag: 452e804800515439568e4c39166185aa0946a289
-  digest: sha256:a24ab94c6c634219a6eeec934e87be4ba663771fe44179f39e27177e9c4242da
+  tag: a7372f433412508a9f78c848f6e6c09c08a5e484
+  digest: sha256:e2e545b72983879ffece976dbbd9c280a25fa3fd16ff732a2a01bc2211329b3e
   pullPolicy: IfNotPresent
 
 existingSecret: stock-ticker-api
@@ -26,7 +26,6 @@ ingress:
   annotations:
     kubernetes.io/ingress.class: gce
     kubernetes.io/ingress.global-static-ip-name: stock-ticker-prod
-    networking.gke.io/managed-certificates: stock-ticker
   host: stock.johnydev.com
   path: /
   pathType: Exact
