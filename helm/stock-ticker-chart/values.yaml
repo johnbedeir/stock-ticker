@@ -2,8 +2,8 @@ replicaCount: 2
 
 image:
   repository: us-east1-docker.pkg.dev/johnydev/stock-ticker/stock-ticker
-  tag: 008136cc85c4800b62b71c628254d8848913d4e4
-  digest: sha256:f20a45bff2ed66ae96896df10e74cf91901b38e88f78ca9e7938b4583cead592
+  tag: aa88b32775d621a8e74c170bbf368124132047e2
+  digest: sha256:46414ac0792bd0f25f795bf9a660635a564de318a1e4516e0ba07e926a9e438d
   pullPolicy: IfNotPresent
 
 existingSecret: stock-ticker-api
